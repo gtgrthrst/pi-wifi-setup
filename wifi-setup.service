@@ -1,0 +1,17 @@
+[Unit]
+Description=Wi-Fi 設定 AP 服務
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/wifi-setup
+ExecStart=/home/pi/wifi-setup/wifi-setup -ssid PiZero-Setup -port 80
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
