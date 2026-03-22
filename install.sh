@@ -64,8 +64,16 @@ if [ "$BUILD_FROM_SOURCE" = true ]; then
   echo "✅ 編譯完成"
 fi
 
-# ── 設定 systemd 服務 ──────────────────────────────────────────────────────
-cat > "$SERVICE_FILE" <<EOF
+# ── 詢問安裝模式 ───────────────────────────────────────────────────────────────
+echo ""
+echo "請選擇安裝模式："
+echo "  1) 手動模式 — 需手動啟動 AP（適合搭配 oled-monitor）"
+echo "  2) 自動模式 — 開機即監控，WiFi 斷線時自動建立 AP（適合無 OLED 裝置）"
+read -rp "請輸入選項 [1/2]（直接 Enter 預設為 1）： " MODE_CHOICE
+MODE_CHOICE="${MODE_CHOICE:-1}"
+
+# ── 安裝兩種服務檔 ─────────────────────────────────────────────────────────────
+cat > "/etc/systemd/system/wifi-setup.service" <<SVCEOF
 [Unit]
 Description=Wi-Fi 設定 AP 服務
 After=NetworkManager.service
@@ -82,23 +90,56 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
+
+cat > "/etc/systemd/system/wifi-autoap.service" <<SVCEOF
+[Unit]
+Description=Wi-Fi 自動 AP 服務（無 WiFi 時自動建立熱點）
+After=NetworkManager.service network.target
+Requires=NetworkManager.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$INSTALL_DIR/wifi-setup -auto -interval 30s -ssid $SSID -port 80
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
 
 systemctl daemon-reload
-echo "✅ systemd 服務已安裝（wifi-setup.service）"
+echo "✅ systemd 服務已安裝（wifi-setup.service + wifi-autoap.service）"
 
-# ── 完成 ───────────────────────────────────────────────────────────────────
+if [ "$MODE_CHOICE" = "2" ]; then
+  systemctl enable wifi-autoap.service
+  systemctl start  wifi-autoap.service
+  echo "✅ 自動模式已啟用並啟動（wifi-autoap.service）"
+fi
+
+# ── 完成 ───────────────────────────────────────────────────────────────────────
 echo ""
 echo "======================================"
 echo "  安裝完成！"
 echo "======================================"
 echo ""
-echo "指令："
-echo "  啟動 AP：sudo systemctl start wifi-setup"
-echo "  停止 AP：sudo systemctl stop  wifi-setup"
-echo "  查看日誌：sudo journalctl -u wifi-setup -f"
+if [ "$MODE_CHOICE" = "2" ]; then
+  echo "【自動模式】"
+  echo "  開機自動啟動，每 30 秒偵測 WiFi 狀態"
+  echo "  WiFi 斷線 → 自動建立 AP；連線後 → 自動關閉 AP"
+  echo "  查看日誌：sudo journalctl -u wifi-autoap -f"
+  echo "  停用：sudo systemctl disable wifi-autoap"
+else
+  echo "【手動模式】"
+  echo "  啟動 AP：sudo systemctl start wifi-setup"
+  echo "  停止 AP：sudo systemctl stop  wifi-setup"
+  echo "  查看日誌：sudo journalctl -u wifi-setup -f"
+fi
 echo ""
 echo "AP 熱點名稱：$SSID"
-echo "密碼：每次啟動隨機產生（請查看 OLED 或日誌）"
 echo "Web UI：http://10.42.0.1/"
 echo ""
