@@ -144,6 +144,84 @@ PW:abc12345
 
 ---
 
+## 重新安裝系統後如何使用
+
+重裝系統後面臨「沒有 WiFi → 無法連線 → 無法設定 WiFi」的問題，以下三種方式擇一：
+
+### 方法一：Raspberry Pi Imager 預設 WiFi（推薦）
+
+刷機時在 Imager 的 ⚙️ 進階設定中填入：
+
+```
+✅ 啟用 SSH
+✅ 設定 WiFi SSID / 密碼（填入目前家用 WiFi）
+✅ 設定主機名稱與使用者密碼
+```
+
+開機後直接 SSH，執行一鍵安裝：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/main/install.sh | sudo bash
+```
+
+安裝完成後，往後 WiFi 更換時即可透過本工具修改，不需重刷。
+
+---
+
+### 方法二：預先複製二進位檔至 SD 卡（完全離線）
+
+SD 卡燒錄完成後插回 Linux 電腦，掛載 rootfs（ext4）分區：
+
+```bash
+# 找分區
+lsblk
+
+# 掛載第二分區（rootfs）
+sudo mount /dev/sdX2 /mnt
+
+# 複製檔案
+sudo mkdir -p /mnt/home/pi/wifi-setup
+sudo cp wifi-setup /mnt/home/pi/wifi-setup/wifi-setup
+sudo chmod +x /mnt/home/pi/wifi-setup/wifi-setup
+sudo cp wifi-setup.service /mnt/etc/systemd/system/
+
+# 設定開機自動啟動
+sudo ln -s /etc/systemd/system/wifi-setup.service \
+           /mnt/etc/systemd/system/multi-user.target.wants/wifi-setup.service
+
+sudo umount /mnt
+```
+
+Pi 開機後自動建立 AP → 用手機連線 → 設定 WiFi → 停用 AP → 完成。
+
+> Windows 用戶需透過 WSL2 或 Ext2Fsd 存取 ext4 分區。
+
+---
+
+### 方法三：透過有線網路（乙太網路）
+
+若手邊有網路線，插上後 Pi 會自動取得 IP，直接 SSH：
+
+```bash
+# 找 Pi 的 IP（從路由器管理頁面，或用 nmap）
+nmap -sn 192.168.0.0/24
+
+ssh pi@<Pi_IP>
+curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/main/install.sh | sudo bash
+```
+
+---
+
+### 一鍵安裝腳本說明
+
+`install.sh` 會自動：
+1. 確認 NetworkManager 是否就緒
+2. 若目錄中已有二進位檔則直接使用；否則從原始碼編譯
+3. 建立 systemd 服務（`/etc/systemd/system/wifi-setup.service`）
+4. 印出使用指令
+
+---
+
 ## 授權
 
 MIT License
