@@ -1,14 +1,12 @@
 [Unit]
-Description=Wi-Fi 設定 AP 服務
+Description=Wi-Fi 設定 AP 服務（Python 版）
 After=NetworkManager.service
 Requires=NetworkManager.service
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/pi/wifi-setup
-ExecStart=/home/pi/wifi-setup/wifi-setup -ssid PiZero-Setup -port 80
-ExecStop=/bin/kill -TERM $MAINPID
+ExecStart=/usr/bin/python3 /home/pi/wifi-setup/wifi_setup.py -ssid PiZero-Setup -port 80
 Restart=no
 StandardOutput=journal
 StandardError=journal

@@ -1,14 +1,18 @@
-# pi-wifi-setup
+# pi-wifi-setup（Python 版）
 
 **無頭樹莓派 WiFi 設定工具**（透過 AP 熱點模式）
 
-Headless Raspberry Pi WiFi configuration tool via AP mode.
+Headless Raspberry Pi WiFi configuration tool via AP mode — Python implementation.
+
+> Go 版本請切換至 `main` 分支。
 
 ---
 
 ## 簡介
 
 在沒有螢幕、鍵盤的樹莓派上，透過臨時建立 WiFi 熱點（AP 模式），讓手機或電腦連線後透過網頁介面管理 WiFi 設定。
+
+僅需 **Python 3**（標準函式庫，無需額外安裝套件），適合資源受限或不想安裝 Go 的環境。
 
 可搭配 [oled-monitor](https://github.com/gtgrthrst/water-level-monitor)（`zero2w` 分支），在 OLED **IP 頁面長按按鈕**即可一鍵啟動/關閉 AP。
 
@@ -24,6 +28,7 @@ Headless Raspberry Pi WiFi configuration tool via AP mode.
 - 將 AP 狀態寫入 `/run/wifi-ap.json`，供 oled-monitor 在 OLED 上顯示 AP 名稱與密碼
 - 關閉 AP 後，樹莓派自動重新連線至已設定的 WiFi
 - 收到 SIGTERM / SIGINT 時自動清理熱點連線
+- **自動模式**：無 OLED 時定時偵測 WiFi，斷線自動建立 AP
 
 ---
 
@@ -33,55 +38,61 @@ Headless Raspberry Pi WiFi configuration tool via AP mode.
 |------|------|
 | 硬體 | 樹莓派（含 `wlan0` 無線網卡） |
 | OS | Raspberry Pi OS Bookworm（NetworkManager 預設啟用） |
+| Python | Python 3.9+（系統內建，無需額外安裝） |
 | 工具 | `nmcli`（NetworkManager CLI） |
 | 權限 | 需以 **root** 執行（建立熱點及讀取 NM 密碼） |
 
 ---
 
-## 編譯
-
-```bash
-# 在本機交叉編譯（針對 arm64）
-GOARCH=arm64 GOOS=linux go build -o wifi-setup .
-
-# 或直接在樹莓派上編譯
-go build -o wifi-setup .
-```
-
----
-
 ## 安裝
 
-```bash
-# 上傳二進位檔到樹莓派
-scp wifi-setup pi@<Pi_IP>:/home/pi/wifi-setup/wifi-setup
+### 一鍵安裝（推薦）
 
-# 安裝 systemd 服務
-sudo cp wifi-setup.service /etc/systemd/system/
-sudo systemctl daemon-reload
+```bash
+curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/python/install-py.sh | sudo bash
 ```
 
-服務設定為**按需啟動**（不隨開機自動啟動），由 oled-monitor 或手動控制：
+安裝腳本會自動：
+1. 確認 NetworkManager 與 Python 3 是否就緒
+2. 下載 `wifi_setup.py` 至 `/home/pi/wifi-setup/`
+3. 建立 systemd 服務（手動或自動模式）
+4. 詢問安裝模式後啟動服務
+
+### 手動安裝
 
 ```bash
-sudo systemctl start wifi-setup   # 啟動 AP
-sudo systemctl stop  wifi-setup   # 關閉 AP
+# 下載腳本
+sudo mkdir -p /home/pi/wifi-setup
+sudo curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/python/wifi_setup.py \
+     -o /home/pi/wifi-setup/wifi_setup.py
+sudo chmod +x /home/pi/wifi-setup/wifi_setup.py
+
+# 安裝 systemd 服務（手動模式）
+sudo cp wifi-setup-py.service /etc/systemd/system/
+sudo systemctl daemon-reload
 ```
 
 ---
 
 ## 使用方式
 
-1. 啟動服務（或在 oled-monitor IP 頁面長按按鈕 ≥3 秒）
-2. 用手機 / 電腦連線到熱點 **`PiZero-Setup`**
-   - 密碼顯示於 OLED 螢幕，或查看 systemd 日誌：
-     ```bash
-     sudo journalctl -u wifi-setup -n 5
-     ```
-3. 開啟瀏覽器，前往 **`http://10.42.0.1/`**
-4. 點擊 **🔍 掃描** 搜尋附近網路，點選目標 SSID 自動填入
-5. 輸入密碼，點擊 **✓ 儲存並套用**
-6. 點擊 **⏹ 關閉 AP** — 樹莓派重新連線至已設定的 WiFi
+### 手動模式（搭配 oled-monitor）
+
+```bash
+sudo systemctl start wifi-setup-py   # 啟動 AP
+sudo systemctl stop  wifi-setup-py   # 關閉 AP
+```
+
+### 自動模式（無 OLED 裝置）
+
+```bash
+sudo systemctl enable wifi-autoap-py
+sudo systemctl start  wifi-autoap-py
+```
+
+開機後每 30 秒偵測 WiFi 狀態：
+- WiFi 斷線 → 自動建立 AP
+- WiFi 連線後 → 自動關閉 AP
 
 ---
 
@@ -91,6 +102,15 @@ sudo systemctl stop  wifi-setup   # 關閉 AP
 |------|--------|------|
 | `-ssid` | `PiZero-Setup` | AP 熱點名稱 |
 | `-port` | `80` | HTTP 服務埠號 |
+| `-password` | （自動產生） | AP 密碼 |
+| `-auto` | false | 啟用自動模式 |
+| `-interval` | `30s` | 自動模式偵測間隔（支援 `30s`、`1m`） |
+
+```bash
+# 直接執行範例
+sudo python3 wifi_setup.py -ssid MyAP -port 8080
+sudo python3 wifi_setup.py -auto -interval 1m -ssid MyAP
+```
 
 每次啟動時自動產生隨機 8 碼密碼（排除易混淆字元）。
 
@@ -144,81 +164,9 @@ PW:abc12345
 
 ---
 
-## 重新安裝系統後如何使用
+## Go 版本
 
-重裝系統後面臨「沒有 WiFi → 無法連線 → 無法設定 WiFi」的問題，以下三種方式擇一：
-
-### 方法一：Raspberry Pi Imager 預設 WiFi（推薦）
-
-刷機時在 Imager 的 ⚙️ 進階設定中填入：
-
-```
-✅ 啟用 SSH
-✅ 設定 WiFi SSID / 密碼（填入目前家用 WiFi）
-✅ 設定主機名稱與使用者密碼
-```
-
-開機後直接 SSH，執行一鍵安裝：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/main/install.sh | sudo bash
-```
-
-安裝完成後，往後 WiFi 更換時即可透過本工具修改，不需重刷。
-
----
-
-### 方法二：預先複製二進位檔至 SD 卡（完全離線）
-
-SD 卡燒錄完成後插回 Linux 電腦，掛載 rootfs（ext4）分區：
-
-```bash
-# 找分區
-lsblk
-
-# 掛載第二分區（rootfs）
-sudo mount /dev/sdX2 /mnt
-
-# 複製檔案
-sudo mkdir -p /mnt/home/pi/wifi-setup
-sudo cp wifi-setup /mnt/home/pi/wifi-setup/wifi-setup
-sudo chmod +x /mnt/home/pi/wifi-setup/wifi-setup
-sudo cp wifi-setup.service /mnt/etc/systemd/system/
-
-# 設定開機自動啟動
-sudo ln -s /etc/systemd/system/wifi-setup.service \
-           /mnt/etc/systemd/system/multi-user.target.wants/wifi-setup.service
-
-sudo umount /mnt
-```
-
-Pi 開機後自動建立 AP → 用手機連線 → 設定 WiFi → 停用 AP → 完成。
-
-> Windows 用戶需透過 WSL2 或 Ext2Fsd 存取 ext4 分區。
-
----
-
-### 方法三：透過有線網路（乙太網路）
-
-若手邊有網路線，插上後 Pi 會自動取得 IP，直接 SSH：
-
-```bash
-# 找 Pi 的 IP（從路由器管理頁面，或用 nmap）
-nmap -sn 192.168.0.0/24
-
-ssh pi@<Pi_IP>
-curl -fsSL https://raw.githubusercontent.com/gtgrthrst/pi-wifi-setup/main/install.sh | sudo bash
-```
-
----
-
-### 一鍵安裝腳本說明
-
-`install.sh` 會自動：
-1. 確認 NetworkManager 是否就緒
-2. 若目錄中已有二進位檔則直接使用；否則從原始碼編譯
-3. 建立 systemd 服務（`/etc/systemd/system/wifi-setup.service`）
-4. 印出使用指令
+功能完全相同的 Go 編譯版本請見 [`main` 分支](https://github.com/gtgrthrst/pi-wifi-setup/tree/main)，執行效率更高但需要 Go 編譯環境。
 
 ---
 

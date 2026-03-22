@@ -1,13 +1,12 @@
 [Unit]
-Description=Wi-Fi 自動 AP 服務（無 WiFi 時自動建立熱點）
+Description=Wi-Fi 自動 AP 服務（Python 版，無 WiFi 時自動建立熱點）
 After=NetworkManager.service network.target
 Requires=NetworkManager.service
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/pi/wifi-setup
-ExecStart=/home/pi/wifi-setup/wifi-setup \
+ExecStart=/usr/bin/python3 /home/pi/wifi-setup/wifi_setup.py \
     -auto \
     -interval 30s \
     -ssid PiZero-Setup \
